@@ -10,7 +10,6 @@ const TradingViewChart = ({ symbol, data }) => {
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
-    // Initialize the professional chart engine
     chartRef.current = createChart(chartContainerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: '#0f172a' },
@@ -29,7 +28,6 @@ const TradingViewChart = ({ symbol, data }) => {
       },
     });
 
-    // FIX: Using the modular addSeries API for v4/v5 compatibility
     candlestickSeriesRef.current = chartRef.current.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
@@ -38,7 +36,6 @@ const TradingViewChart = ({ symbol, data }) => {
       wickDownColor: '#ef4444',
     });
 
-    // Add 20-day Moving Average as a LineSeries
     maSeriesRef.current = chartRef.current.addSeries(LineSeries, {
       color: '#3b82f6',
       lineWidth: 2,
@@ -46,7 +43,6 @@ const TradingViewChart = ({ symbol, data }) => {
       crosshairMarkerVisible: false,
     });
 
-    // Handle responsive resizing
     const handleResize = () => {
       if (chartRef.current && chartContainerRef.current) {
         chartRef.current.applyOptions({ 
@@ -65,35 +61,29 @@ const TradingViewChart = ({ symbol, data }) => {
     };
   }, []);
 
-  // Function to calculate n-period Moving Average
   const calculateMA = (data, period) => {
     const res = [];
     for (let i = 0; i < data.length; i++) {
       if (i < period - 1) continue;
-      const sum = data.slice(i - period + 1, i + 1).reduce((acc, val) => acc + val.close, 0);
+      const subset = data.slice(i - period + 1, i + 1);
+      const sum = subset.reduce((acc, val) => acc + val.close, 0);
       res.push({ time: data[i].time, value: sum / period });
     }
     return res;
   };
 
-  // Update data when the asset or price changes
   useEffect(() => {
-    if (candlestickSeriesRef.current && data) {
-      // Lightweight charts expects an array for the initial load
-      // Ensure data is sorted by time to avoid "Value is undefined" errors
-      if (Array.isArray(data) && data.length > 0) {
-        candlestickSeriesRef.current.setData(data);
-        
-        // Calculate and apply 20-day Moving Average
-        if (data.length > 20) {
-          const maData = calculateMA(data, 20);
-          if (maSeriesRef.current && maData.length > 0) {
-            maSeriesRef.current.setData(maData);
-          }
-        }
-      } else if (!Array.isArray(data) && data.time) {
-        // Handle real-time single tick updates
-        candlestickSeriesRef.current.update(data);
+    if (candlestickSeriesRef.current && data && data.length > 0) {
+      // FIX: Force set data to ensure the chart visuals match the state exactly
+      candlestickSeriesRef.current.setData(data);
+
+      if (data.length >= 20 && maSeriesRef.current) {
+        const maData = calculateMA(data, 20);
+        maSeriesRef.current.setData(maData);
+      }
+
+      if (chartRef.current) {
+        chartRef.current.timeScale().scrollToPosition(0, false);
       }
     }
   }, [data, symbol]);
@@ -106,11 +96,6 @@ const TradingViewChart = ({ symbol, data }) => {
             <h2 className="text-lg font-bold text-white tracking-tight">
                 {symbol} <span className="text-slate-500 font-normal text-sm ml-2">Real-time Feed</span>
             </h2>
-        </div>
-        <div className="flex space-x-2">
-          <span className="text-[10px] bg-slate-800 border border-slate-700 px-2 py-1 rounded text-slate-400 font-mono uppercase">
-            Interval: 1m
-          </span>
         </div>
       </div>
       <div ref={chartContainerRef} className="flex-grow w-full min-h-[350px]" />

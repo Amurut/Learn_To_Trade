@@ -19,7 +19,10 @@ function App() {
 
   useEffect(() => {
     engineRef.current = new MockDataEngine();
-    engineRef.current.subscribe(setMarketState);
+    engineRef.current.subscribe((allData) => {
+      // FIX: Force React to see a new object reference every 2 seconds
+      setMarketState({ ...allData });
+    });
     engineRef.current.start();
     return () => engineRef.current?.stop();
   }, []);
@@ -27,136 +30,130 @@ function App() {
   // Sync PNL with live prices
   useEffect(() => {
     const totalPnl = positions.reduce((acc, pos) => {
-      const symbolKey = pos.symbol.split(' ')[0]; // Handle "BTC CALL" → "BTC"
+      const symbolKey = pos.symbol.split(' ')[0];
       const data = marketState[symbolKey];
-      const price = data?.[data.length - 1]?.close || 0;
+      if (!data || data.length === 0) return acc;
+      
+      const price = data[data.length - 1].close;
       const diff = pos.side === 'Long' ? (price - pos.entryPrice) : (pos.entryPrice - price);
       return acc + (diff * pos.size);
     }, 0);
     setUnrealizedPnl(totalPnl);
   }, [marketState, positions, setUnrealizedPnl]);
 
+  const handleOpenPosition = ({ symbol, side, amount }) => {
+    const targetSymbol = symbol || selectedSymbol;
+    const assetKey = targetSymbol.split(' ')[0];
+    const assetData = marketState[assetKey];
+    const currentPrice = Array.isArray(assetData)
+      ? assetData[assetData.length - 1]?.close
+      : 0;
+
+    if (currentPrice > 0) {
+      openPosition({
+        side,
+        symbol: targetSymbol,
+        entryPrice: currentPrice,
+        size: parseFloat(amount),
+      });
+    } else {
+      alert('Market data unavailable. Please wait for the price feed.');
+    }
+  };
+
   const selectedChartData = useMemo(() => marketState[selectedSymbol] || [], [marketState, selectedSymbol]);
   const livePrice = selectedChartData.length > 0 ? selectedChartData[selectedChartData.length - 1].close : 0;
 
   return (
     <div className="h-screen bg-slate-950 text-white flex flex-col overflow-hidden">
-      <header className="p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center shadow-2xl">
-        <h1 
-          onClick={() => setView('landing')} 
-          className="text-xl font-bold cursor-pointer hover:text-blue-400 transition-colors"
-        >
+      <header className="p-4 bg-slate-900 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0 shadow-2xl">
+        <h1 onClick={() => setView('landing')} className="text-xl font-bold cursor-pointer">
           TradeLearner <span className="text-blue-500 text-sm">PRO</span>
         </h1>
-        <div className="flex items-center gap-8">
-          <div className="text-right">
-            <p className="text-[10px] text-slate-500 uppercase">Balance</p>
-            <p className="text-green-400 font-mono font-bold">${balance.toFixed(2)}</p>
+
+        <div className="flex items-center justify-between w-full sm:w-auto gap-4 md:gap-8">
+          <div className="text-left sm:text-right">
+            <p className="text-[10px] text-slate-500 uppercase font-bold">Balance</p>
+            <p className="text-green-400 font-mono font-bold text-sm sm:text-lg">${balance.toFixed(2)}</p>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-slate-500 uppercase">Total PNL</p>
-            <p className={`font-mono font-bold ${unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className="text-left sm:text-right">
+            <p className="text-[10px] text-slate-500 uppercase font-bold">Total PNL</p>
+            <p className={`font-mono font-bold text-sm sm:text-lg ${unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
               {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
             </p>
           </div>
-          <button 
-            onClick={() => setIsGlossaryOpen(true)} 
-            className="bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-lg text-xs font-bold transition-colors"
-          >
+          <button onClick={() => setIsGlossaryOpen(true)} className="bg-slate-800 px-3 py-1.5 rounded-lg text-[10px] font-bold">
             GLOSSARY
           </button>
         </div>
       </header>
 
-      <main className="flex-grow overflow-y-auto custom-scrollbar">
+      <main className="flex-grow overflow-y-auto p-4 container mx-auto custom-scrollbar">
         {view === 'landing' ? (
-          <div className="container mx-auto py-10 px-4">
-            <h2 className="text-4xl font-black mb-2 italic">MARKET DASHBOARD</h2>
-            <p className="text-slate-500 mb-10">Select an asset to enter the execution terminal.</p>
-            <MarketOverview 
-              marketState={marketState} 
-              onSelectAsset={(s) => { 
-                setSelectedSymbol(s); 
-                setView('terminal'); 
-              }} 
-            />
-          </div>
+          <MarketOverview 
+            marketState={marketState} 
+            onSelectAsset={(s) => { setSelectedSymbol(s); setView('terminal'); }} 
+          />
         ) : (
-          <div className="container mx-auto p-4 grid grid-cols-12 gap-6 h-full overflow-hidden">
-            <div className="col-span-12 flex items-center justify-between mb-2">
-              <button 
-                onClick={() => setView('landing')} 
-                className="text-blue-400 hover:text-white transition-colors text-sm font-semibold"
-              >
-                ← Back to Dashboard
-              </button>
-              <h2 className="text-xl font-bold">{selectedSymbol} Terminal</h2>
-              <div className="w-32"></div>
-            </div>
-
-            <div className="col-span-12 lg:col-span-8 overflow-hidden">
+          <div className="flex flex-col lg:flex-row gap-6 h-full">
+            <div className="w-full lg:w-2/3 flex flex-col min-h-[400px] lg:h-full">
+              <div className="mb-2 flex justify-between items-center">
+                <button onClick={() => setView('landing')} className="text-blue-400 text-sm font-bold">← BACK</button>
+                <h2 className="text-lg font-bold">{selectedSymbol}</h2>
+              </div>
               <TradingViewChart data={selectedChartData} symbol={selectedSymbol} />
             </div>
 
-            <div className="col-span-12 lg:col-span-4 flex flex-col gap-6 overflow-hidden">
+            <div className="w-full lg:w-1/3 flex flex-col gap-6 h-full">
               <TradePanel 
                 symbols={Object.keys(marketState)} 
                 selectedSymbol={selectedSymbol} 
                 onSymbolChange={setSelectedSymbol} 
-                onOpenPosition={({side, amount}) => openPosition({
-                  side, 
-                  symbol: selectedSymbol, 
-                  entryPrice: livePrice, 
-                  size: amount
-                })}
+                onOpenPosition={handleOpenPosition}
                 livePrice={livePrice} 
               />
 
-              {/* Simplified Positions List */}
-              <div className="bg-slate-900/80 rounded-2xl border border-slate-800 p-4 flex-grow overflow-y-auto shadow-xl">
-                <h3 className="text-xs font-bold text-slate-500 uppercase mb-4 tracking-widest">Active Positions ({positions.length})</h3>
-                {positions.length > 0 ? (
-                  positions.map(p => {
-                    const assetData = marketState[p.symbol];
-                    const currentPrice = Array.isArray(assetData) ? assetData[assetData.length - 1].close : livePrice;
-                    const pnl = p.side === 'Long' 
-                      ? (currentPrice - p.entryPrice) * p.size 
-                      : (p.entryPrice - currentPrice) * p.size;
-                    
-                    return (
-                      <div 
-                        key={p.id} 
-                        className="flex justify-between items-center mb-3 p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-slate-700 transition-colors"
-                      >
-                        <div className="flex-1">
-                          <p className="text-sm font-bold text-white">{p.symbol}</p>
-                          <p className="text-xs text-slate-500">
-                            {p.side === 'Long' ? '📈' : '📉'} {p.side} • Entry: ${p.entryPrice.toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="text-right mr-3">
-                          <p className={`text-sm font-bold ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
-                          </p>
-                        </div>
-                        <button 
-                          onClick={() => closePosition(p.id, currentPrice)} 
-                          className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-400 px-3 py-1 rounded font-bold transition-colors"
-                        >
-                          EXIT
-                        </button>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-center py-8 text-slate-500 text-sm italic">No active positions. Open a trade to get started.</p>
-                )}
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 min-h-[300px] lg:flex-grow overflow-hidden">
+                <h3 className="text-xs font-bold text-slate-500 uppercase mb-4">Active Positions</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="text-slate-500 font-bold uppercase border-b border-slate-800">
+                      <tr>
+                        <th className="px-2 py-2">Asset</th>
+                        <th className="px-2 py-2">Side</th>
+                        <th className="px-2 py-2">Size</th>
+                        <th className="px-2 py-2">PNL</th>
+                        <th className="px-2 py-2">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.length > 0 ? positions.map(p => {
+                        const assetKey = p.symbol.split(' ')[0];
+                        const assetData = marketState[assetKey] || [];
+                        const currentPrice = assetData.length > 0 ? assetData[assetData.length - 1].close : livePrice;
+                        const pnl = p.side === 'Long' ? (currentPrice - p.entryPrice) * p.size : (p.entryPrice - currentPrice) * p.size;
+                        return (
+                          <tr key={p.id} className="border-b border-slate-800 hover:bg-slate-800">
+                            <td className="px-2 py-2">{p.symbol}</td>
+                            <td className="px-2 py-2">{p.side}</td>
+                            <td className="px-2 py-2">{p.size}</td>
+                            <td className={`px-2 py-2 ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</td>
+                            <td className="px-2 py-2">
+                              <button onClick={() => closePosition(p.id, currentPrice)} className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-400 px-2 py-1 rounded">EXIT</button>
+                            </td>
+                          </tr>
+                        );
+                      }) : (
+                        <tr><td colSpan="5" className="text-center py-4 text-slate-500">No active positions.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
         )}
       </main>
-
       <GlossarySidebar isOpen={isGlossaryOpen} onClose={() => setIsGlossaryOpen(false)} />
     </div>
   );

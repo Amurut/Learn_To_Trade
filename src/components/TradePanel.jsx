@@ -102,8 +102,8 @@ const OptionsTab = ({ onOpenPosition, livePrice, selectedSymbol }) => {
           <strong>Tip:</strong> Buy Calls if you expect prices to rise; Buy Puts if you expect them to fall. Theta represents time decay.
         </p>
       </div>
-      <div className="overflow-hidden rounded-xl border border-slate-800">
-        <table className="w-full text-xs text-left">
+      <div className="w-full overflow-x-auto -mx-2 px-2 rounded-xl border border-slate-800">
+        <table className="min-w-[400px] text-xs text-left">
           <thead className="bg-slate-900 text-slate-400 font-bold border-b border-slate-800">
             <tr>
               <th className="px-4 py-3">Call</th>
