@@ -4,16 +4,22 @@ const GlobalStateContext = createContext();
 
 export const GlobalStateProvider = ({ children }) => {
   const [balance, setBalance] = useState(10000);
+  const [portfolioValue, setPortfolioValue] = useState(10000);
   const [positions, setPositions] = useState([]);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
+  const [tradeHistory, setTradeHistory] = useState([]);
 
   const value = {
     balance,
     setBalance,
+    portfolioValue,
+    setPortfolioValue,
     positions,
     setPositions,
     unrealizedPnl,
     setUnrealizedPnl,
+    tradeHistory,
+    setTradeHistory,
   };
 
   return (

@@ -1,7 +1,7 @@
 import { useGlobalState } from '../context/GlobalStateContext';
 
 export const useTradingLogic = () => {
-  const { positions, setPositions, balance, setBalance } = useGlobalState();
+  const { positions, setPositions, balance, setBalance, tradeHistory, setTradeHistory } = useGlobalState();
 
   /**
    * Opens a new trading position.
@@ -12,41 +12,72 @@ export const useTradingLogic = () => {
    * @param {number} params.size - The size of the position.
    */
   const openPosition = ({ side, symbol, entryPrice, size }) => {
-    const positionCost = Number(entryPrice) * Number(size);
+    const cost = Number(entryPrice) * Number(size);
+    
+    // Check if sufficient cash is available
+    if (balance < cost) {
+      alert('Insufficient Cash Balance');
+      return;
+    }
+    
+    // 1. Deduct the full cost from cash (this is "locked" capital)
+    setBalance(prev => prev - cost);
+    
+    // 2. Store the position with its cost for audit trail
     const newPosition = {
       id: `pos-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       side,
       symbol,
       entryPrice: Number(entryPrice),
       size: Number(size),
-      amount: positionCost,
+      cost: cost, // Store cost for audit log
     };
     setPositions(prevPositions => [...prevPositions, newPosition]);
   };
 
   /**
-   * Closes an existing trading position.
+   * Closes an existing trading position with Net-Zero accounting.
    * @param {string} positionId - The ID of the position to close.
-   * @param {number} currentPrice - The current market price at which the position is closed.
+   * @param {number} currentMarketPrice - The current market price at which the position is closed.
    */
-  const closePosition = (positionId, currentPrice) => {
-    setPositions(prev => prev.filter(p => {
-      if (p.id !== positionId) return true;
+  const closePosition = (positionId, currentMarketPrice) => {
+    // 1. Find the position first (outside of setState to prevent double-execution)
+    const positionToClose = positions.find(p => p.id === positionId);
+    if (!positionToClose) return; // Guard: position must exist
 
-      let pnl = 0;
-      // Check if it's an Option (contains CALL/PUT in symbol)
-      if (p.symbol.includes('CALL') || p.symbol.includes('PUT')) {
-        const isCall = p.symbol.includes('CALL');
-        // Simplified Option Exit: Difference in intrinsic value
-        pnl = isCall ? (currentPrice - p.entryPrice) * p.size : (p.entryPrice - currentPrice) * p.size;
-      } else {
-        // Standard equity position logic
-        pnl = p.side === 'Long' ? (currentPrice - p.entryPrice) * p.size : (p.entryPrice - currentPrice) * p.size;
-      }
+    // 2. Calculate the PNL (profit or loss)
+    const isLong = positionToClose.side === 'Long';
+    const pnl = isLong
+      ? (currentMarketPrice - positionToClose.entryPrice) * positionToClose.size
+      : (positionToClose.entryPrice - currentMarketPrice) * positionToClose.size;
 
-      setBalance(old => old + p.amount + pnl);
-      return false;
-    }));
+    // 3. Calculate return amount (original capital + PNL)
+    const initialCapital = positionToClose.entryPrice * positionToClose.size;
+    const finalReturn = initialCapital + pnl;
+
+    // 4. FIRST: Remove position from active list (prevents double-close)
+    setPositions(prev => prev.filter(p => p.id !== positionId));
+
+    // 5. THEN: Restore capital to balance
+    setBalance(oldBalance => {
+      const newBalance = oldBalance + finalReturn;
+      console.log(`[LEDGER] Close ${positionToClose.symbol}: Cost=$${initialCapital.toFixed(2)} + PNL=$${pnl.toFixed(2)} = Return=$${finalReturn.toFixed(2)} | Old Balance=$${oldBalance.toFixed(2)} → New=$${newBalance.toFixed(2)}`);
+      return newBalance;
+    });
+
+    // 6. FINALLY: Record to Trade History for audit trail
+    setTradeHistory(prevH => [{
+      id: `trade-${Date.now()}`,
+      symbol: positionToClose.symbol,
+      side: positionToClose.side,
+      entryPrice: positionToClose.entryPrice,
+      exitPrice: currentMarketPrice,
+      size: positionToClose.size,
+      cost: initialCapital,
+      pnl: pnl,
+      finalReturn: finalReturn,
+      timestamp: new Date().toISOString(),
+    }, ...prevH]);
   };
 
   // The unrealized PnL is the profit or loss that is currently held in open positions.

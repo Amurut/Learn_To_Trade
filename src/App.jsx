@@ -12,7 +12,7 @@ function App() {
   const [view, setView] = useState('landing'); 
   const [selectedSymbol, setSelectedSymbol] = useState('BTC/USD');
   const [isGlossaryOpen, setIsGlossaryOpen] = useState(false);
-  const { balance, positions, unrealizedPnl, setUnrealizedPnl } = useGlobalState();
+  const { balance, positions, unrealizedPnl, setUnrealizedPnl, portfolioValue, setPortfolioValue } = useGlobalState();
   const { openPosition, closePosition } = useTradingLogic();
   const [marketState, setMarketState] = useState({});
   const engineRef = useRef(null);
@@ -27,8 +27,9 @@ function App() {
     return () => engineRef.current?.stop();
   }, []);
 
-  // Sync PNL with live prices
+  // Sync PNL with live prices and calculate portfolio value
   useEffect(() => {
+    // 1. Calculate total unrealized PNL for all open positions
     const totalPnl = positions.reduce((acc, pos) => {
       const symbolKey = pos.symbol.split(' ')[0];
       const data = marketState[symbolKey];
@@ -38,8 +39,37 @@ function App() {
       const diff = pos.side === 'Long' ? (price - pos.entryPrice) : (pos.entryPrice - price);
       return acc + (diff * pos.size);
     }, 0);
+
     setUnrealizedPnl(totalPnl);
-  }, [marketState, positions, setUnrealizedPnl]);
+    
+    // 2. Calculate current market value of all positions (only active non-closed positions)
+    const currentMarketValue = positions.reduce((acc, pos) => {
+      const symbolKey = pos.symbol.split(' ')[0];
+      const data = marketState[symbolKey];
+      if (!data || data.length === 0) return acc;
+      
+      const marketPrice = data[data.length - 1].close;
+      
+      if (pos.side === 'Long') {
+        // For Long: market value = current market price * size
+        // This represents what the position is worth in the market RIGHT NOW
+        return acc + (marketPrice * pos.size);
+      } else {
+        // For Short: market value = what we owe - current debt
+        // Short math: if we shorted at $100 and price is now $90, we profit $10
+        // Market value of our obligation = entry price * size - (current price - entry) * size
+        // Which simplifies to: entry * size - current * size + entry * size = (entry - current) * size + entry * size
+        // Actually simpler: our liability is the current price * size, our credit is entry price * size
+        // Net position value = entry * size - current * size = (entry - current) * size
+        const pnl = (pos.entryPrice - marketPrice) * pos.size;
+        return acc + pnl; // Only count the PNL for shorts, not the capital
+      }
+    }, 0);
+
+    // 3. Portfolio Value = Cash Balance + Current Market Value of Holdings
+    // This ensures: closing a position immediately credits the cash and removes it from portfolio
+    setPortfolioValue(balance + currentMarketValue);
+  }, [marketState, positions, balance, setUnrealizedPnl, setPortfolioValue]);
 
   const handleOpenPosition = ({ symbol, side, amount }) => {
     const targetSymbol = symbol || selectedSymbol;
@@ -73,7 +103,11 @@ function App() {
 
         <div className="flex items-center justify-between w-full sm:w-auto gap-4 md:gap-8">
           <div className="text-left sm:text-right">
-            <p className="text-[10px] text-slate-500 uppercase font-bold">Balance</p>
+            <p className="text-[10px] text-slate-500 uppercase font-bold">Portfolio Value</p>
+            <p className="text-white font-mono font-bold text-sm sm:text-lg">${portfolioValue.toFixed(2)}</p>
+          </div>
+          <div className="text-left sm:text-right">
+            <p className="text-[10px] text-slate-500 uppercase font-bold">Available Cash</p>
             <p className="text-green-400 font-mono font-bold text-sm sm:text-lg">${balance.toFixed(2)}</p>
           </div>
           <div className="text-left sm:text-right">
@@ -139,7 +173,15 @@ function App() {
                             <td className="px-2 py-2">{p.size}</td>
                             <td className={`px-2 py-2 ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</td>
                             <td className="px-2 py-2">
-                              <button onClick={() => closePosition(p.id, currentPrice)} className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-400 px-2 py-1 rounded">EXIT</button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  closePosition(p.id, currentPrice);
+                                }} 
+                                className="text-[10px] bg-red-500/20 hover:bg-red-500/40 text-red-400 px-2 py-1 rounded"
+                              >
+                                EXIT
+                              </button>
                             </td>
                           </tr>
                         );
