@@ -13,7 +13,7 @@ const TabButton = ({ title, isActive, onClick }) => (
   </button>
 );
 
-const EquitiesTab = ({ onOpenPosition, livePrice, symbols, selectedSymbol, onSymbolChange }) => {
+const EquitiesTab = ({ onOpenPosition, livePrice, selectedSymbol }) => {
   const [amount, setAmount] = useState('');
 
   const handleTrade = (side) => {
@@ -21,58 +21,41 @@ const EquitiesTab = ({ onOpenPosition, livePrice, symbols, selectedSymbol, onSym
       onOpenPosition({ side, symbol: selectedSymbol, amount: parseFloat(amount) });
       setAmount('');
     } else {
-      alert('Enter a valid amount and wait for price feed.');
+      alert('Enter a valid quantity.');
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2">
-        <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Select Asset</label>
-        <div className="grid grid-cols-2 gap-2">
-          {symbols.map((s) => (
-            <button
-              key={s}
-              onClick={() => onSymbolChange(s)}
-              className={`py-2 px-3 rounded-md text-sm font-medium border transition-all ${
-                selectedSymbol === s
-                  ? 'bg-blue-600 border-blue-500 text-white'
-                  : 'bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-500'
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </div>
-
+    <div className="space-y-4">
+      {/* Visual Indicator of the Locked Asset */}
       <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-center">
-        <p className="text-xs text-slate-500 mb-1">Market Price</p>
-        <p className="text-3xl font-mono font-bold text-white">
+        <p className="text-[10px] text-slate-500 uppercase font-bold mb-1 tracking-widest">Trading {selectedSymbol}</p>
+        <p className="text-2xl font-mono font-bold text-white">
           {livePrice > 0 ? `$${livePrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '---'}
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-3">
+        <label className="text-[10px] font-bold text-slate-500 uppercase px-1">Quantity</label>
         <input
           type="number"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder="Quantity / Size"
+          placeholder="Enter number of shares..."
           className="w-full bg-slate-800 border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
         />
-        <div className="flex gap-3">
+        <div className="flex gap-3 pt-2">
           <button
             onClick={() => handleTrade('Long')}
-            className="flex-1 bg-green-500 hover:bg-green-600 text-slate-950 font-bold py-3 rounded-lg shadow-lg shadow-green-900/20 transition-transform active:scale-95"
+            className="flex-1 bg-green-500 hover:bg-green-600 text-slate-950 font-bold py-3 rounded-xl shadow-lg transition-transform active:scale-95"
           >
-            Buy / Long
+            BUY
           </button>
           <button
             onClick={() => handleTrade('Short')}
-            className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-lg shadow-lg shadow-red-900/20 transition-transform active:scale-95"
+            className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 rounded-xl shadow-transform active:scale-95"
           >
-            Sell / Short
+            SELL
           </button>
         </div>
       </div>
@@ -165,7 +148,7 @@ const CommoditiesTab = ({ onOpenPosition, livePrice }) => {
   );
 };
 
-const TradePanel = ({ onOpenPosition, livePrice, symbols, selectedSymbol, onSymbolChange }) => {
+const TradePanel = ({ onOpenPosition, livePrice, selectedSymbol }) => {
   const [activeTab, setActiveTab] = useState('Equities');
 
   return (
@@ -185,9 +168,7 @@ const TradePanel = ({ onOpenPosition, livePrice, symbols, selectedSymbol, onSymb
           <EquitiesTab 
             onOpenPosition={onOpenPosition} 
             livePrice={livePrice} 
-            symbols={symbols}
             selectedSymbol={selectedSymbol}
-            onSymbolChange={onSymbolChange}
           />
         )}
         {activeTab === 'Options' && (

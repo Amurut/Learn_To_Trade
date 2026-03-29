@@ -8,6 +8,9 @@ export const GlobalStateProvider = ({ children }) => {
   const [positions, setPositions] = useState([]);
   const [unrealizedPnl, setUnrealizedPnl] = useState(0);
   const [tradeHistory, setTradeHistory] = useState([]);
+  const [ledger, setLedger] = useState([
+    { id: 1, type: 'INITIAL_DEPOSIT', amount: 10000, runningBalance: 10000, time: new Date().toLocaleTimeString() }
+  ]);
 
   const value = {
     balance,
@@ -20,6 +23,8 @@ export const GlobalStateProvider = ({ children }) => {
     setUnrealizedPnl,
     tradeHistory,
     setTradeHistory,
+    ledger,
+    setLedger,
   };
 
   return (

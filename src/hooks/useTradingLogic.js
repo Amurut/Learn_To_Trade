@@ -1,7 +1,7 @@
 import { useGlobalState } from '../context/GlobalStateContext';
 
 export const useTradingLogic = () => {
-  const { positions, setPositions, balance, setBalance, tradeHistory, setTradeHistory } = useGlobalState();
+  const { positions, setPositions, balance, setBalance, tradeHistory, setTradeHistory, ledger, setLedger } = useGlobalState();
 
   /**
    * Opens a new trading position.
@@ -20,17 +20,28 @@ export const useTradingLogic = () => {
       return;
     }
     
-    // 1. Deduct the full cost from cash (this is "locked" capital)
-    setBalance(prev => prev - cost);
+    // 1. Update balance and record ledger entry
+    const newBalance = balance - cost;
+    setBalance(newBalance);
     
-    // 2. Store the position with its cost for audit trail
+    // 2. Record to ledger
+    setLedger(prevLedger => [{
+      id: Date.now(),
+      type: 'BUY_ORDER',
+      symbol: symbol,
+      amount: -cost,
+      runningBalance: newBalance,
+      time: new Date().toLocaleTimeString()
+    }, ...prevLedger]);
+    
+    // 3. Store the position
     const newPosition = {
       id: `pos-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       side,
       symbol,
       entryPrice: Number(entryPrice),
       size: Number(size),
-      cost: cost, // Store cost for audit log
+      cost: cost,
     };
     setPositions(prevPositions => [...prevPositions, newPosition]);
   };
@@ -55,18 +66,27 @@ export const useTradingLogic = () => {
     const initialCapital = positionToClose.entryPrice * positionToClose.size;
     const finalReturn = initialCapital + pnl;
 
-    // 4. FIRST: Remove position from active list (prevents double-close)
+    // 4. Calculate new balance
+    const newBalance = balance + finalReturn;
+
+    // 5. Remove position from active list (prevents double-close)
     setPositions(prev => prev.filter(p => p.id !== positionId));
 
-    // 5. THEN: Restore capital to balance
-    setBalance(oldBalance => {
-      const newBalance = oldBalance + finalReturn;
-      console.log(`[LEDGER] Close ${positionToClose.symbol}: Cost=$${initialCapital.toFixed(2)} + PNL=$${pnl.toFixed(2)} = Return=$${finalReturn.toFixed(2)} | Old Balance=$${oldBalance.toFixed(2)} → New=$${newBalance.toFixed(2)}`);
-      return newBalance;
-    });
+    // 6. Update balance
+    setBalance(newBalance);
 
-    // 6. FINALLY: Record to Trade History for audit trail
-    setTradeHistory(prevH => [{
+    // 7. Record to ledger with cash flow
+    setLedger(prevLedger => [{
+      id: Date.now(),
+      type: 'SELL_ORDER',
+      symbol: positionToClose.symbol,
+      amount: finalReturn,
+      runningBalance: newBalance,
+      time: new Date().toLocaleTimeString()
+    }, ...prevLedger]);
+
+    // 8. Record to Trade History with P&L detail
+    setTradeHistory(prevHistory => [{
       id: `trade-${Date.now()}`,
       symbol: positionToClose.symbol,
       side: positionToClose.side,
@@ -76,8 +96,10 @@ export const useTradingLogic = () => {
       cost: initialCapital,
       pnl: pnl,
       finalReturn: finalReturn,
-      timestamp: new Date().toISOString(),
-    }, ...prevH]);
+      timestamp: new Date().toLocaleTimeString()
+    }, ...prevHistory]);
+
+    console.log(`[LEDGER] Close ${positionToClose.symbol}: Cost=$${initialCapital.toFixed(2)} + PNL=$${pnl.toFixed(2)} = Return=$${finalReturn.toFixed(2)} | Old Balance=$${balance.toFixed(2)} → New=$${newBalance.toFixed(2)}`);
   };
 
   // The unrealized PnL is the profit or loss that is currently held in open positions.

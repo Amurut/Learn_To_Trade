@@ -45,8 +45,10 @@ const TradingViewChart = ({ symbol, data }) => {
 
     const handleResize = () => {
       if (chartRef.current && chartContainerRef.current) {
+        const isMobile = window.innerWidth < 768;
         chartRef.current.applyOptions({ 
-            width: chartContainerRef.current.clientWidth 
+          width: chartContainerRef.current.clientWidth,
+          height: isMobile ? 300 : 400
         });
       }
     };
@@ -89,16 +91,20 @@ const TradingViewChart = ({ symbol, data }) => {
   }, [data, symbol]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col h-full shadow-2xl">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col shadow-2xl overflow-hidden mb-4">
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center space-x-3">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <h2 className="text-lg font-bold text-white tracking-tight">
-                {symbol} <span className="text-slate-500 font-normal text-sm ml-2">Real-time Feed</span>
-            </h2>
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+          <h2 className="text-lg font-bold text-white tracking-tight">{symbol}</h2>
         </div>
       </div>
-      <div ref={chartContainerRef} className="flex-grow w-full min-h-[350px]" />
+      
+      {/* FIX: Explicit height with relative positioning for chart container */}
+      <div 
+        ref={chartContainerRef} 
+        className="w-full relative" 
+        style={{ height: typeof window !== 'undefined' && window.innerWidth < 768 ? '300px' : '400px' }} 
+      />
     </div>
   );
 };
